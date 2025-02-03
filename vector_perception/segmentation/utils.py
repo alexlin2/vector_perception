@@ -1,31 +1,48 @@
 import numpy as np
 import cv2
 import torch
-from collections import deque, Counter
+import time
 
 
 class SimpleTracker:
-    def __init__(self, history_size=10, min_count=5):
+    def __init__(self, history_size=100, min_count=10, count_window=20):
         """
         Simple temporal tracker that counts appearances in a fixed window.
-        
-        Parameters:
-        history_size: Number of past frames to remember
-        min_count: Minimum number of appearances required
+        :param history_size: Number of past frames to remember
+        :param min_count: Minimum number of appearances required
+        :param count_window: Number of latest frames to consider for counting
         """
-        self.history = deque(maxlen=history_size)
+        self.history = []
+        self.history_size = history_size
         self.min_count = min_count
-        
+        self.count_window = count_window
+        self.total_counts = {}
+
     def update(self, track_ids):
         # Add new frame's track IDs to history
         self.history.append(track_ids)
+        if len(self.history) > self.history_size:
+            self.history.pop(0)
+
+        # Consider only the latest `count_window` frames for counting
+        recent_history = self.history[-self.count_window:]
+        all_tracks = np.concatenate(recent_history) if recent_history else np.array([])
         
-        # Count appearances of each ID in history
-        all_tracks = [id for frame_ids in self.history for id in frame_ids]
-        counts = Counter(all_tracks)
+        # Compute occurrences efficiently using numpy
+        unique_ids, counts = np.unique(all_tracks, return_counts=True)
+        id_counts = dict(zip(unique_ids, counts))
+        
+        # Update total counts but ensure it only contains IDs within the history size
+        total_tracked_ids = np.concatenate(self.history) if self.history else np.array([])
+        unique_total_ids, total_counts = np.unique(total_tracked_ids, return_counts=True)
+        self.total_counts = dict(zip(unique_total_ids, total_counts))
         
         # Return IDs that appear often enough
-        return [id for id, count in counts.items() if count >= self.min_count]
+        return [track_id for track_id, count in id_counts.items() if count >= self.min_count]
+    
+    def get_total_counts(self):
+        """Returns the total count of each tracking ID seen over time, limited to history size."""
+        return self.total_counts
 
 
 def extract_masks_bboxes_probs_names(result, max_size=0.7):
@@ -138,7 +155,6 @@ def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs,
     if len(masks) <= 1:
         return masks, bboxes, track_ids, probs, names, torch.zeros(frame.shape[:2], dtype=torch.float32)
     
-    # Get stable track IDs
     stable_ids = tracker.update(track_ids)
     
     # Keep only temporally stable detections
