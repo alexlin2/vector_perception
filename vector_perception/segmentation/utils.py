@@ -134,7 +134,7 @@ def compute_texture_map(frame, blur_size=3):
     return texture_map
 
 
-def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs, names, areas, texture_threshold=0.1, size_filter=600):
+def filter_segmentation_results(frame, masks, bboxes, track_ids, probs, names, areas, texture_threshold=0.07, size_filter=600):
     """
     Filters segmentation results using both overlap and saliency detection.
     Uses mask_sum tensor for efficient overlap detection.
@@ -148,31 +148,18 @@ def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs,
     areas: list of object areas
     frame: BGR image for computing saliency
     texture_threshold: Average texture value required for mask to be kept
+    size_filter: Minimum size of the object to be kept
     
     Returns:
-    tuple: (filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names)
+    tuple: (filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names, filtered_texture_values, texture_map)
     """
     if len(masks) <= 1:
-        return masks, bboxes, track_ids, probs, names, torch.zeros(frame.shape[:2], dtype=torch.float32)
-    
-    stable_ids = tracker.update(track_ids)
-    
-    # Keep only temporally stable detections
-    keep_temporal = [i for i, track_id in enumerate(track_ids) if track_id in stable_ids]
-    if not keep_temporal:
-        return [], [], [], [], [], torch.zeros(frame.shape[:2], dtype=torch.float32)
-
-    masks = [masks[i] for i in keep_temporal]
-    bboxes = [bboxes[i] for i in keep_temporal]
-    track_ids = [track_ids[i] for i in keep_temporal]
-    probs = [probs[i] for i in keep_temporal]
-    names = [names[i] for i in keep_temporal]
-    areas = [areas[i] for i in keep_temporal]
+        return masks, bboxes, track_ids, probs, names, []
         
     # Compute texture map once and convert to tensor
     texture_map = compute_texture_map(frame)
     
-    # Sort by area (largest to smallest)
+    # Sort by area (smallest to largest)
     sorted_indices = torch.tensor(areas).argsort(descending=False)
 
     device = masks[0].device  # Get the device of the first mask
@@ -182,6 +169,8 @@ def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs,
     
     texture_map = torch.from_numpy(texture_map).to(device)  # Convert texture_map to tensor and move to device
     
+    filtered_texture_values = []  # List to store texture values of filtered masks
+    
     for i, idx in enumerate(sorted_indices):
         mask = masks[idx]
         # Compute average texture value within mask
@@ -190,6 +179,7 @@ def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs,
         # Only claim pixels if mask passes texture threshold
         if texture_value >= texture_threshold:
             mask_sum[mask > 0] = i
+            filtered_texture_values.append(texture_value.item())  # Store the texture value as a Python float
     
     # Get indices that appear in mask_sum (these are the masks we want to keep)
     keep_indices, counts = torch.unique(mask_sum[mask_sum > 0], return_counts=True)
@@ -208,7 +198,7 @@ def filter_segmentation_results(frame, tracker, masks, bboxes, track_ids, probs,
     filtered_probs = [probs[i] for i in final_indices]
     filtered_names = [names[i] for i in final_indices]
 
-    return filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names, texture_map
+    return filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names, filtered_texture_values
 
 
 def plot_results(image, masks, bboxes, track_ids, probs, names, alpha=0.5):
@@ -252,3 +242,33 @@ def plot_results(image, masks, bboxes, track_ids, probs, names, alpha=0.5):
     # Blend
     image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
     return image
+
+
+def crop_images_from_bboxes(image, bboxes, buffer=0):
+    """
+    Crops regions from an image based on bounding boxes with an optional buffer.
+
+    Parameters:
+    image (numpy array): Input image.
+    bboxes (list of lists): List of bounding boxes [x1, y1, x2, y2].
+    buffer (int): Number of pixels to expand each bounding box.
+
+    Returns:
+    list of numpy arrays: Cropped image regions.
+    """
+    height, width, _ = image.shape
+    cropped_images = []
+
+    for bbox in bboxes:
+        x1, y1, x2, y2 = bbox
+
+        # Apply buffer
+        x1 = max(0, x1 - buffer)
+        y1 = max(0, y1 - buffer)
+        x2 = min(width, x2 + buffer)
+        y2 = min(height, y2 + buffer)
+
+        cropped_image = image[int(y1):int(y2), int(x1):int(x2)]
+        cropped_images.append(cropped_image)
+
+    return cropped_images
