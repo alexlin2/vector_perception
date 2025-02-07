@@ -184,7 +184,7 @@ class target2d:
         w_size = weights.get("size", 1.0)
         total_weight = w_prob + w_temporal + w_texture + w_border + w_size
 
-        print(f"track_id: {self.target_id}, avg_prob: {avg_prob:.2f}, temporal_stability: {temporal_stability:.2f}, normalized_texture: {normalized_texture:.2f}, border_factor: {border_factor:.2f}, size_factor: {size_factor:.2f}")
+        #print(f"track_id: {self.target_id}, avg_prob: {avg_prob:.2f}, temporal_stability: {temporal_stability:.2f}, normalized_texture: {normalized_texture:.2f}, border_factor: {border_factor:.2f}, size_factor: {size_factor:.2f}")
         
         final_score = (w_prob * avg_prob +
                        w_temporal * temporal_stability +

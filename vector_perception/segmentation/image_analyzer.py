@@ -50,14 +50,15 @@ class ImageAnalyzer:
             messages=[
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": "What is in these images? Answer with only nouns and/or adjective, only give one answer, if you are unsure, say unknown"}] + image_data,
+                    "content": [{"type": "text", "text": "What is in these images? Give a short word answer with at most three words, if not sure, say unknown"}] + image_data,
                 }
             ],
             max_tokens=300,
+            timeout=5,
         )
 
         # Accessing the content of the response using dot notation
-        return [choice.message.content for choice in response.choices]
+        return [choice.message.content for choice in response.choices][0]
 
 
 def main():
@@ -88,7 +89,34 @@ def main():
     # Analyze images
     results = analyzer.analyze_images(images)
     
-    print(results[0])
+    # Split results into a list of items
+    object_list = [item.strip()[2:] for item in results.split('\n')]
+
+    # Overlay text on images and display them
+    for i, (img, obj) in enumerate(zip(images, object_list)):
+        if obj:  # Only process non-empty lines
+            # Add text to image
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5
+            thickness = 2
+            text = obj.strip()
+            
+            # Get text size
+            (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+            
+            # Position text at top of image
+            x = 10
+            y = text_height + 10
+            
+            # Add white background for text
+            cv2.rectangle(img, (x-5, y-text_height-5), (x+text_width+5, y+5), (255,255,255), -1)
+            # Add text
+            cv2.putText(img, text, (x, y), font, font_scale, (0,0,0), thickness)
+            
+            # Save or display the image
+            cv2.imwrite(f"annotated_image_{i}.jpg", img)
+            print(f"Detected object: {obj}")
+
 
 if __name__ == "__main__":
     main()

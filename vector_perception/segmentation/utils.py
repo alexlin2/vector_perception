@@ -203,7 +203,8 @@ def filter_segmentation_results(frame, masks, bboxes, track_ids, probs, names, a
 
 def plot_results(image, masks, bboxes, track_ids, probs, names, alpha=0.5):
     """
-    Draws bounding boxes, masks, and labels on the given image.
+    Draws bounding boxes, masks, and labels on the given image with enhanced visualization.
+    Includes object names in the overlay and improved text visibility.
     """
     h, w = image.shape[:2]
     overlay = image.copy()
@@ -214,34 +215,58 @@ def plot_results(image, masks, bboxes, track_ids, probs, names, alpha=0.5):
             mask = mask.cpu().numpy()
 
         mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
+        
+        # Generate consistent color based on track_id
         if track_id != -1:
-            # Use track_id to generate consistent color
             np.random.seed(track_id)
             color = np.random.randint(0, 255, (3,), dtype=np.uint8)
-            np.random.seed(None)  # Reset seed
+            np.random.seed(None)
         else:
             color = np.random.randint(0, 255, (3,), dtype=np.uint8)
+            
+        # Apply mask color
         overlay[mask_resized > 0.5] = color
 
-        # Bounding box
-        x1, y1, x2, y2 = bbox
-        cv2.rectangle(overlay, (int(x1), int(y1)), (int(x2), int(y2)), color.tolist(), 2)
+        # Draw bounding box
+        x1, y1, x2, y2 = map(int, bbox)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color.tolist(), 2)
 
-        # Label
-        label = f"{track_id} {prob:.2f}"
-        cv2.putText(
-            overlay,
-            label,
-            (int(x1), int(y1) - 5),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            color.tolist(),
+        # Prepare label text
+        label = f"ID:{track_id} {prob:.2f}"
+        if name:  # Add object name if available
+            label += f" {name}"
+
+        # Calculate text size for background rectangle
+        (text_w, text_h), _ = cv2.getTextSize(
+            label, 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
             1
         )
 
-    # Blend
-    image = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
-    return image
+        # Draw background rectangle for text
+        cv2.rectangle(
+            overlay, 
+            (x1, y1-text_h-8), 
+            (x1+text_w+4, y1), 
+            color.tolist(), 
+            -1
+        )
+
+        # Draw text with white color for better visibility
+        cv2.putText(
+            overlay,
+            label,
+            (x1+2, y1-5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),  # White text
+            1
+        )
+
+    # Blend overlay with original image
+    result = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
+    return result
 
 
 def crop_images_from_bboxes(image, bboxes, buffer=0):
