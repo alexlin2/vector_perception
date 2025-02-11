@@ -1,3 +1,15 @@
+```
+██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗ 
+██║   ██║██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+██║   ██║█████╗  ██║        ██║   ██║   ██║██████╔╝
+╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║   ██║██╔══██╗
+ ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║
+  ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
+    ╔═╗┌─┐┬─┐┌─┐┌─┐┌─┐┌┬┐┬┌─┐┌┐┌
+    ╠═╝├┤ ├┬┘│  ├┤ ├─┘ │ ││ ││││
+    ╩  └─┘┴└─└─┘└─┘┴   ┴ ┴└─┘┘└┘
+```
+
 # Perception Stack for General Robotics Application
 
 A comprehensive computer vision and perception package for robotics applications, featuring real-time 2D segmentation, object tracking, and image analysis capabilities.
