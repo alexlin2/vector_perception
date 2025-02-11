@@ -9,37 +9,43 @@ from utils import extract_masks_bboxes_probs_names, \
 from vector_perception.common.detection2d_tracker import target2dTracker, get_tracked_results
 from image_analyzer import ImageAnalyzer
 from collections import deque
-import os
 from concurrent.futures import ThreadPoolExecutor, Future
 
 
 class Sam2DSegmenter:
-    def __init__(self, model_path="models/FastSAM-s.engine", device="cuda"):
+    def __init__(self, model_path="models/FastSAM-s.engine", device="cuda", 
+                 min_analysis_interval=5.0, use_tracker=True, use_analyzer=True):
         # Core components
         self.device = device
         self.model = FastSAM(model_path)
-        self.image_analyzer = ImageAnalyzer()
+        self.use_tracker = use_tracker
+        self.use_analyzer = use_analyzer
         
-        # Tracker initialization
-        self.tracker = target2dTracker(
-            history_size=100,
-            score_threshold_start=0.7,
-            score_threshold_stop=0.2,
-            min_frame_count=10,
-            max_missed_frames=20,
-            min_area_ratio=0.02,
-            max_area_ratio=0.4,
-            texture_range=(0.0, 0.35),
-            border_safe_distance=100,
-            weights={"prob": 1.0, "temporal": 3.0, "texture": 2.0, "border": 3.0, "size": 1.0}
-        )
+        # Initialize tracker if enabled
+        if self.use_tracker:
+            self.tracker = target2dTracker(
+                history_size=150,
+                score_threshold_start=0.7,
+                score_threshold_stop=0.05,
+                min_frame_count=10,
+                max_missed_frames=100,
+                min_area_ratio=0.02,
+                max_area_ratio=0.4,
+                texture_range=(0.0, 0.35),
+                border_safe_distance=100,
+                weights={"prob": 1.0, "temporal": 3.0, "texture": 2.0, "border": 3.0, "size": 1.0}
+            )
         
-        # Analysis components
-        self.to_be_analyzed = deque()  # Queue of objects waiting for analysis
-        self.object_names = {}  # Dictionary to store track_id -> name mappings
-        self.analysis_executor = ThreadPoolExecutor(max_workers=1)
-        self.current_future = None
-        self.current_analysis_id = None
+        # Initialize analyzer components if enabled
+        if self.use_analyzer:
+            self.image_analyzer = ImageAnalyzer()
+            self.min_analysis_interval = min_analysis_interval
+            self.last_analysis_time = 0
+            self.to_be_analyzed = deque()
+            self.object_names = {}
+            self.analysis_executor = ThreadPoolExecutor(max_workers=1)
+            self.current_future = None
+            self.current_queue_ids = None
 
     def process_image(self, image):
         """Process an image and return segmentation results."""
@@ -62,80 +68,114 @@ class Sam2DSegmenter:
             filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names, filtered_texture_values = \
                 filter_segmentation_results(image, masks, bboxes, track_ids, probs, names, areas)
             
-            # Update tracker with filtered results
-            tracked_targets = self.tracker.update(
-                image,
-                filtered_masks,
-                filtered_bboxes,
-                filtered_track_ids,
-                filtered_probs,
-                filtered_names,
-                filtered_texture_values,
-            )
-            
-            # Get tracked results
-            tracked_masks, tracked_bboxes, tracked_track_ids, tracked_probs, tracked_names = get_tracked_results(tracked_targets)
-            
-            # Update analysis queue with tracked IDs
-            tracked_id_set = set(tracked_track_ids)
-            
-            # Remove untracked objects from queue and results
-            self.to_be_analyzed = deque([track_id for track_id in self.to_be_analyzed 
-                                       if track_id in tracked_id_set])
-            self.object_names = {k: v for k, v in self.object_names.items() 
-                               if k in tracked_id_set}
-            
-            # If current analysis object is no longer tracked, cancel it
-            if self.current_analysis_id and self.current_analysis_id not in tracked_id_set:
-                if self.current_future and not self.current_future.done():
-                    self.current_future.cancel()
-                self.current_analysis_id = None
-                self.current_future = None
-            
-            # Add new track_ids to analysis queue
-            for track_id in tracked_track_ids:
-                if track_id not in self.object_names and track_id not in self.to_be_analyzed:
-                    self.to_be_analyzed.append(track_id)
-            
-            return tracked_masks, tracked_bboxes, tracked_track_ids, tracked_probs, tracked_names
+            if self.use_tracker:
+                # Update tracker with filtered results
+                tracked_targets = self.tracker.update(
+                    image,
+                    filtered_masks,
+                    filtered_bboxes,
+                    filtered_track_ids,
+                    filtered_probs,
+                    filtered_names,
+                    filtered_texture_values,
+                )
+                
+                # Get tracked results
+                tracked_masks, tracked_bboxes, tracked_target_ids, tracked_probs, tracked_names = get_tracked_results(tracked_targets)
+                
+                if self.use_analyzer:
+                    # Update analysis queue with tracked IDs
+                    target_id_set = set(tracked_target_ids)
+
+                    # Remove untracked objects from object_names
+                    all_target_ids = list(self.tracker.targets.keys())
+                    self.object_names = {track_id: name for track_id, name in self.object_names.items()
+                                        if track_id in all_target_ids}
+                    
+                    # Remove untracked objects from queue and results
+                    self.to_be_analyzed = deque([track_id for track_id in self.to_be_analyzed 
+                                           if track_id in target_id_set])
+                    
+                    # Filter out any IDs being analyzed from the to_be_analyzed queue
+                    if self.current_queue_ids:
+                        self.to_be_analyzed = deque([tid for tid in self.to_be_analyzed 
+                                               if tid not in self.current_queue_ids])
+                    
+                    # Add new track_ids to analysis queue
+                    for track_id in tracked_target_ids:
+                        if track_id not in self.object_names and track_id not in self.to_be_analyzed:
+                            self.to_be_analyzed.append(track_id)
+                
+                return tracked_masks, tracked_bboxes, tracked_target_ids, tracked_probs, tracked_names
+            else:
+                # Return filtered results directly if tracker is disabled
+                return filtered_masks, filtered_bboxes, filtered_track_ids, filtered_probs, filtered_names
         return [], [], [], [], []
 
-    def check_analysis_status(self, tracked_track_ids):
-        """Check if analysis is complete and start new analysis if needed."""
-        # Check if current analysis is complete
+    def check_analysis_status(self, tracked_target_ids):
+        """Check if analysis is complete and prepare new queue if needed."""
+        if not self.use_analyzer:
+            return None, None
+
+        current_time = time.time()
+        
+        # Check if current queue analysis is complete
         if self.current_future and self.current_future.done():
             try:
-                result = self.current_future.result()
-                if result is not None:
-                    self.object_names[self.current_analysis_id] = result
+                results = self.current_future.result()
+                if results is not None:
+                    # Map results to track IDs
+                    object_list = [item.split()[1:] for item in results.split('\n')]
+                    for track_id, result in zip(self.current_queue_ids, object_list):
+                        result_str = ' '.join(result)
+                        self.object_names[track_id] = result_str
             except Exception as e:
-                print(f"Analysis failed: {e}")
+                print(f"Queue analysis failed: {e}")
             self.current_future = None
-            self.current_analysis_id = None
+            self.current_queue_ids = None
+            self.last_analysis_time = current_time
 
-        # Start new analysis if none is running
-        if not self.current_future and self.to_be_analyzed:
-            track_id = self.to_be_analyzed[0]
-            if track_id in tracked_track_ids:
-                bbox_idx = tracked_track_ids.index(track_id)
-                self.current_analysis_id = track_id
+        # If enough time has passed and we have items to analyze, start new analysis
+        if (not self.current_future and self.to_be_analyzed and 
+            current_time - self.last_analysis_time >= self.min_analysis_interval):
+            
+            queue_indices = []
+            queue_ids = []
+            
+            # Collect all valid track IDs from the queue
+            while self.to_be_analyzed:
+                track_id = self.to_be_analyzed[0]
+                if track_id in tracked_target_ids:
+                    bbox_idx = tracked_target_ids.index(track_id)
+                    queue_indices.append(bbox_idx)
+                    queue_ids.append(track_id)
                 self.to_be_analyzed.popleft()
-                return bbox_idx
-        return None
+                
+            if queue_indices:
+                return queue_indices, queue_ids
+        return None, None
 
-    def run_analysis(self, frame, tracked_bboxes, tracked_track_ids):
-        """Run image analysis in background."""
-        bbox_idx = self.check_analysis_status(tracked_track_ids)
-        if bbox_idx is not None:
-            bbox = tracked_bboxes[bbox_idx]
-            cropped_images = crop_images_from_bboxes(frame, [bbox])
+    def run_analysis(self, frame, tracked_bboxes, tracked_target_ids):
+        """Run queue image analysis in background."""
+        if not self.use_analyzer:
+            return
+
+        queue_indices, queue_ids = self.check_analysis_status(tracked_target_ids)
+        if queue_indices:
+            selected_bboxes = [tracked_bboxes[i] for i in queue_indices]
+            cropped_images = crop_images_from_bboxes(frame, selected_bboxes)
             if cropped_images:
+                self.current_queue_ids = queue_ids
+                print(f"Analyzing : {queue_ids}")
                 self.current_future = self.analysis_executor.submit(
                     self.image_analyzer.analyze_images, cropped_images
                 )
 
     def get_object_names(self, track_ids, tracked_names):
         """Get object names for the given track IDs, falling back to tracked names."""
+        if not self.use_analyzer:
+            return tracked_names
+            
         return [self.object_names.get(track_id, tracked_name) 
                 for track_id, tracked_name in zip(track_ids, tracked_names)]
 
@@ -145,12 +185,22 @@ class Sam2DSegmenter:
 
     def cleanup(self):
         """Cleanup resources."""
-        self.analysis_executor.shutdown()
+        if self.use_analyzer:
+            self.analysis_executor.shutdown()
 
 
 def main():
+    # Example usage with different configurations
     cap = cv2.VideoCapture(0)
-    segmenter = Sam2DSegmenter()
+    
+    # Example 1: Full functionality (tracker and analyzer enabled)
+    segmenter = Sam2DSegmenter(min_analysis_interval=4.0, use_tracker=True, use_analyzer=True)
+    
+    # Example 2: Tracker only (analyzer disabled)
+    # segmenter = Sam2DSegmenter(use_analyzer=False)
+    
+    # Example 3: Basic segmentation only (both tracker and analyzer disabled)
+    # segmenter = Sam2DSegmenter(use_tracker=False, use_analyzer=False)
 
     try:
         while cap.isOpened():
@@ -160,28 +210,27 @@ def main():
 
             start_time = time.time()
             
-            # Process image and get tracked results
-            tracked_masks, tracked_bboxes, tracked_track_ids, tracked_probs, tracked_names = segmenter.process_image(frame)
+            # Process image and get results
+            masks, bboxes, target_ids, probs, names = segmenter.process_image(frame)
             
-            # Run analysis in background
-            segmenter.run_analysis(frame, tracked_bboxes, tracked_track_ids)
-            
-            # Get current object names
-            updated_names = segmenter.get_object_names(tracked_track_ids, tracked_names)
+            # Run analysis if enabled
+            if segmenter.use_tracker and segmenter.use_analyzer:
+                segmenter.run_analysis(frame, bboxes, target_ids)
+                names = segmenter.get_object_names(target_ids, names)
 
             processing_time = time.time() - start_time
-            print(f"Processing time: {processing_time * 1000:.1f}ms")
+            #print(f"Processing time: {processing_time:.2f}s")
 
             overlay = segmenter.visualize_results(
                 frame, 
-                tracked_masks, 
-                tracked_bboxes, 
-                tracked_track_ids, 
-                tracked_probs, 
-                updated_names
+                masks, 
+                bboxes, 
+                target_ids, 
+                probs, 
+                names
             )
 
-            cv2.imshow("Segmentation with Tracking", overlay)
+            cv2.imshow("Segmentation", overlay)
             key = cv2.waitKey(1)
             if key & 0xFF == ord("q"):
                 break

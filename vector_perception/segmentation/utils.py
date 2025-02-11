@@ -134,7 +134,7 @@ def compute_texture_map(frame, blur_size=3):
     return texture_map
 
 
-def filter_segmentation_results(frame, masks, bboxes, track_ids, probs, names, areas, texture_threshold=0.07, size_filter=600):
+def filter_segmentation_results(frame, masks, bboxes, track_ids, probs, names, areas, texture_threshold=0.07, size_filter=800):
     """
     Filters segmentation results using both overlap and saliency detection.
     Uses mask_sum tensor for efficient overlap detection.

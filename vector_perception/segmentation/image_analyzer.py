@@ -26,7 +26,7 @@ class ImageAnalyzer:
         _, buffer = cv2.imencode(".jpg", image)
         return base64.b64encode(buffer).decode("utf-8")
 
-    def analyze_images(self, images, detail="low"):
+    def analyze_images(self, images, detail="auto"):
         """
         Takes a list of cropped images and returns descriptions from OpenAI's Vision model.
 
@@ -50,7 +50,7 @@ class ImageAnalyzer:
             messages=[
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": "What is in these images? Give a short word answer with at most three words, if not sure, say unknown"}] + image_data,
+                    "content": [{"type": "text", "text": "What is in these images? Give a short word answer with at most two words, if not sure, say unknown"}] + image_data,
                 }
             ],
             max_tokens=300,
