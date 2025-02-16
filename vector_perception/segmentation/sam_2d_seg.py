@@ -2,15 +2,15 @@ import cv2
 import numpy as np
 import time
 from ultralytics import FastSAM
-from utils import extract_masks_bboxes_probs_names, \
-                  filter_segmentation_results, \
-                  plot_results, \
-                  crop_images_from_bboxes
+from vector_perception.segmentation.utils import extract_masks_bboxes_probs_names, \
+                                                filter_segmentation_results, \
+                                                plot_results, \
+                                                crop_images_from_bboxes
 from vector_perception.common.detection2d_tracker import target2dTracker, get_tracked_results
-from image_analyzer import ImageAnalyzer
+from vector_perception.segmentation.image_analyzer import ImageAnalyzer
+import os
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, Future
-
+from concurrent.futures import ThreadPoolExecutor
 
 class Sam2DSegmenter:
     def __init__(self, model_path="models/FastSAM-s.engine", device="cuda", 
@@ -20,7 +20,10 @@ class Sam2DSegmenter:
         self.model = FastSAM(model_path)
         self.use_tracker = use_tracker
         self.use_analyzer = use_analyzer
-        
+
+        module_dir = os.path.dirname(__file__)
+        self.tracker_config = os.path.join(module_dir, 'config', 'custom_tracker.yaml')
+
         # Initialize tracker if enabled
         if self.use_tracker:
             self.tracker = target2dTracker(
@@ -57,7 +60,7 @@ class Sam2DSegmenter:
             iou=0.9,
             persist=True,
             verbose=False,
-            tracker="vector_perception/segmentation/config/custom_tracker.yaml"
+            tracker=self.tracker_config,
         )
 
         if len(results) > 0:
