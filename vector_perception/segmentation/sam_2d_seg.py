@@ -194,7 +194,7 @@ class Sam2DSegmenter:
 
 def main():
     # Example usage with different configurations
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     
     # Example 1: Full functionality (tracker and analyzer enabled)
     segmenter = Sam2DSegmenter(min_analysis_interval=4.0, use_tracker=True, use_analyzer=True)
@@ -222,7 +222,7 @@ def main():
                 names = segmenter.get_object_names(target_ids, names)
 
             processing_time = time.time() - start_time
-            #print(f"Processing time: {processing_time:.2f}s")
+            print(f"Processing time: {processing_time:.2f}s")
 
             overlay = segmenter.visualize_results(
                 frame, 

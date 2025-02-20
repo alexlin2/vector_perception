@@ -16,6 +16,7 @@ setup(
     ],
     package_data={
         'vector_perception.segmentation': ['config/*.yaml'],
+        'vector_perception.detection2d': ['config/*.yaml'],
     },
     include_package_data=True,
 )
