@@ -23,6 +23,15 @@ A comprehensive computer vision and perception package for robotics applications
 - TensorRT model export support
 - Comprehensive visualization tools
 
+## Demo
+
+![demo](assets/demo.gif)
+3D pointcloud segmentation using 2D segmentation masks and depth from ToF sensor
+
+![Segmentation with Object Tracking](assets/Segmentation_with_Tracking_screenshot.png)
+Real-time object tracking and semantic segmentation on diverse objects with zero-shot capabilities
+
+
 ## Installation
 
 ### Prerequisites

@@ -1,13 +1,76 @@
 import numpy as np
 import cv2
 
-
-def extract_detection_results(result):
+def filter_detections(bboxes, track_ids, class_ids, confidences, names,
+                    class_filter=None, name_filter=None, track_id_filter=None):
     """
-    Extract detection information from a YOLO result object.
+    Filter detection results based on class IDs, names, and/or tracking IDs.
+    
+    Args:
+        bboxes: List of bounding boxes [x1, y1, x2, y2]
+        track_ids: List of tracking IDs
+        class_ids: List of class indices
+        confidences: List of detection confidences
+        names: List of class names
+        class_filter: List/set of class IDs to keep, or None to keep all
+        name_filter: List/set of class names to keep, or None to keep all
+        track_id_filter: List/set of track IDs to keep, or None to keep all
+        
+    Returns:
+        tuple: (filtered_bboxes, filtered_track_ids, filtered_class_ids, 
+                filtered_confidences, filtered_names)
+    """
+    # Convert filters to sets for efficient lookup
+    if class_filter is not None:
+        class_filter = set(class_filter)
+    if name_filter is not None:
+        name_filter = set(name_filter)
+    if track_id_filter is not None:
+        track_id_filter = set(track_id_filter)
+    
+    # Initialize lists for filtered results
+    filtered_bboxes = []
+    filtered_track_ids = []
+    filtered_class_ids = []
+    filtered_confidences = []
+    filtered_names = []
+    
+    # Filter detections
+    for bbox, track_id, class_id, conf, name in zip(
+        bboxes, track_ids, class_ids, confidences, names):
+        
+        # Check if detection passes all specified filters
+        keep = True
+        
+        if class_filter is not None:
+            keep = keep and (class_id in class_filter)
+            
+        if name_filter is not None:
+            keep = keep and (name in name_filter)
+            
+        if track_id_filter is not None:
+            keep = keep and (track_id in track_id_filter)
+            
+        # If detection passes all filters, add it to results
+        if keep:
+            filtered_bboxes.append(bbox)
+            filtered_track_ids.append(track_id)
+            filtered_class_ids.append(class_id)
+            filtered_confidences.append(conf)
+            filtered_names.append(name)
+    
+    return (filtered_bboxes, filtered_track_ids, filtered_class_ids, 
+            filtered_confidences, filtered_names)
+
+def extract_detection_results(result, class_filter=None, name_filter=None, track_id_filter=None):
+    """
+    Extract and optionally filter detection information from a YOLO result object.
     
     Args:
         result: Ultralytics result object
+        class_filter: List/set of class IDs to keep, or None to keep all
+        name_filter: List/set of class names to keep, or None to keep all
+        track_id_filter: List/set of track IDs to keep, or None to keep all
         
     Returns:
         tuple: (bboxes, track_ids, class_ids, confidences, names)
@@ -29,21 +92,34 @@ def extract_detection_results(result):
     for box in result.boxes:
         # Extract bounding box coordinates
         x1, y1, x2, y2 = box.xyxy[0].tolist()
-        bboxes.append([x1, y1, x2, y2])
         
         # Extract tracking ID if available
         track_id = -1
         if hasattr(box, 'id') and box.id is not None:
             track_id = int(box.id[0].item())
-        track_ids.append(track_id)
-        
+            
         # Extract class information
         cls_idx = int(box.cls[0])
-        class_ids.append(cls_idx)
-        names.append(result.names[cls_idx])
+        name = result.names[cls_idx]
         
         # Extract confidence
-        confidences.append(float(box.conf[0]))
+        conf = float(box.conf[0])
+        
+        # Check filters before adding to results
+        keep = True
+        if class_filter is not None:
+            keep = keep and (cls_idx in class_filter)
+        if name_filter is not None:
+            keep = keep and (name in name_filter)
+        if track_id_filter is not None:
+            keep = keep and (track_id in track_id_filter)
+            
+        if keep:
+            bboxes.append([x1, y1, x2, y2])
+            track_ids.append(track_id)
+            class_ids.append(cls_idx)
+            confidences.append(conf)
+            names.append(name)
 
     return bboxes, track_ids, class_ids, confidences, names
 

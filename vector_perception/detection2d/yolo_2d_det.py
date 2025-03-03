@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from vector_perception.detection2d.utils import extract_detection_results, plot_results
+from vector_perception.detection2d.utils import extract_detection_results, plot_results, filter_detections
 import os
 
 
@@ -38,10 +38,10 @@ class Yolo2DDetector:
         results = self.model.track(
             source=image,
             device=self.device,
-            conf=0.25,
-            iou=0.45,
+            conf=0.5,
+            iou=0.6,
             persist=True,
-            verbose=True,
+            verbose=False,
             tracker=self.tracker_config
         )
 
@@ -73,10 +73,12 @@ class Yolo2DDetector:
 def main():
     """Example usage of the Yolo2DDetector class."""
     # Initialize video capture
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     
     # Initialize detector
     detector = Yolo2DDetector()
+
+    enable_person_filter = True
 
     try:
         while cap.isOpened():
@@ -86,6 +88,15 @@ def main():
 
             # Process frame
             bboxes, track_ids, class_ids, confidences, names = detector.process_image(frame)
+            
+            # Apply person filtering if enabled
+            if enable_person_filter and len(bboxes) > 0:
+                # Person is class_id 0 in COCO dataset
+                bboxes, track_ids, class_ids, confidences, names = filter_detections(
+                    bboxes, track_ids, class_ids, confidences, names,
+                    class_filter=[0],  # 0 is the class_id for person
+                    name_filter=['person']
+                )
             
             # Visualize results
             if len(bboxes) > 0:
