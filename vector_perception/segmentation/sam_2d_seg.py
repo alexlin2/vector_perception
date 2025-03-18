@@ -13,7 +13,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
 class Sam2DSegmenter:
-    def __init__(self, model_path="models/FastSAM-s.engine", device="cuda", 
+    def __init__(self, model_path="FastSAM-s.pt", device="cuda", 
                  min_analysis_interval=5.0, use_tracker=True, use_analyzer=True):
         # Core components
         self.device = device
@@ -194,7 +194,7 @@ class Sam2DSegmenter:
 
 def main():
     # Example usage with different configurations
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     
     # Example 1: Full functionality (tracker and analyzer enabled)
     segmenter = Sam2DSegmenter(min_analysis_interval=4.0, use_tracker=True, use_analyzer=True)
