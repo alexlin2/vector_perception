@@ -27,12 +27,12 @@ class Sam2DSegmenter:
         # Initialize tracker if enabled
         if self.use_tracker:
             self.tracker = target2dTracker(
-                history_size=150,
+                history_size=80,
                 score_threshold_start=0.7,
                 score_threshold_stop=0.05,
                 min_frame_count=10,
-                max_missed_frames=100,
-                min_area_ratio=0.02,
+                max_missed_frames=50,
+                min_area_ratio=0.05,
                 max_area_ratio=0.4,
                 texture_range=(0.0, 0.35),
                 border_safe_distance=100,
