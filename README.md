@@ -60,7 +60,7 @@ Required packages:
 Install the package in development mode:
 
 ```bash
-git clone https://github.com/yourusername/vector_perception.git
+git clone https://github.com/alexlin2/vector_perception.git
 cd vector_perception
 pip install -e .
 ```
