@@ -51,8 +51,8 @@ Required packages:
 - ultralytics>=8.3.70
 - filterpy>=1.4.5
 - scipy>=1.15.1
-- torch>=2.5.0
-- torchvision>=0.20.0
+- torch>=2.0.0
+- torchvision>=0.10.0
 - openai>=1.61.0
 
 ### Package Installation
