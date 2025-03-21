@@ -14,12 +14,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 class Sam2DSegmenter:
     def __init__(self, model_path="FastSAM-s.pt", device="cuda", 
-                 min_analysis_interval=5.0, use_tracker=True, use_analyzer=True):
+                 min_analysis_interval=5.0, use_tracker=True, use_analyzer=True,
+                 use_rich_labeling=False):
         # Core components
         self.device = device
         self.model = FastSAM(model_path)
         self.use_tracker = use_tracker
         self.use_analyzer = use_analyzer
+        self.use_rich_labeling = use_rich_labeling
 
         module_dir = os.path.dirname(__file__)
         self.tracker_config = os.path.join(module_dir, 'config', 'custom_tracker.yaml')
@@ -128,10 +130,9 @@ class Sam2DSegmenter:
                 results = self.current_future.result()
                 if results is not None:
                     # Map results to track IDs
-                    object_list = [item.split()[1:] for item in results.split('\n')]
+                    object_list = eval(results)
                     for track_id, result in zip(self.current_queue_ids, object_list):
-                        result_str = ' '.join(result)
-                        self.object_names[track_id] = result_str
+                        self.object_names[track_id] = result
             except Exception as e:
                 print(f"Queue analysis failed: {e}")
             self.current_future = None
@@ -141,7 +142,7 @@ class Sam2DSegmenter:
         # If enough time has passed and we have items to analyze, start new analysis
         if (not self.current_future and self.to_be_analyzed and 
             current_time - self.last_analysis_time >= self.min_analysis_interval):
-            
+
             queue_indices = []
             queue_ids = []
             
@@ -169,9 +170,17 @@ class Sam2DSegmenter:
             cropped_images = crop_images_from_bboxes(frame, selected_bboxes)
             if cropped_images:
                 self.current_queue_ids = queue_ids
-                print(f"Analyzing : {queue_ids}")
+                print(f"Analyzing objects with track_ids: {queue_ids}")
+
+                if self.use_rich_labeling:
+                    prompt_type = "rich"
+                else:
+                    prompt_type = "normal"
+                    
                 self.current_future = self.analysis_executor.submit(
-                    self.image_analyzer.analyze_images, cropped_images
+                    self.image_analyzer.analyze_images, 
+                    cropped_images,
+                    prompt_type=prompt_type
                 )
 
     def get_object_names(self, track_ids, tracked_names):
@@ -196,13 +205,21 @@ def main():
     # Example usage with different configurations
     cap = cv2.VideoCapture(0)
     
-    # Example 1: Full functionality (tracker and analyzer enabled)
-    segmenter = Sam2DSegmenter(min_analysis_interval=4.0, use_tracker=True, use_analyzer=True)
+    # Example 1: Full functionality with rich labeling
+    segmenter = Sam2DSegmenter(
+        min_analysis_interval=4.0, 
+        use_tracker=True, 
+        use_analyzer=True,
+        use_rich_labeling=True  # Enable rich labeling
+    )
     
-    # Example 2: Tracker only (analyzer disabled)
+    # Example 2: Full functionality with normal labeling
+    # segmenter = Sam2DSegmenter(min_analysis_interval=4.0, use_tracker=True, use_analyzer=True)
+    
+    # Example 3: Tracker only (analyzer disabled)
     # segmenter = Sam2DSegmenter(use_analyzer=False)
     
-    # Example 3: Basic segmentation only (both tracker and analyzer disabled)
+    # Example 4: Basic segmentation only (both tracker and analyzer disabled)
     # segmenter = Sam2DSegmenter(use_tracker=False, use_analyzer=False)
 
     try:
@@ -221,8 +238,8 @@ def main():
                 segmenter.run_analysis(frame, bboxes, target_ids)
                 names = segmenter.get_object_names(target_ids, names)
 
-            processing_time = time.time() - start_time
-            print(f"Processing time: {processing_time:.2f}s")
+            #processing_time = time.time() - start_time
+            #print(f"Processing time: {processing_time:.2f}s")
 
             overlay = segmenter.visualize_results(
                 frame, 

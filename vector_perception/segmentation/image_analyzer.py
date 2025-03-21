@@ -5,6 +5,16 @@ import cv2
 import numpy as np
 import os
 
+NORMAL_PROMPT = "What are in these images? Give a short word answer with at most two words, \
+                if not sure, give a description of its shape or color like 'small tube', 'blue item'. \" \
+                if does not look like an object, say 'unknown'. Export objects as a list of strings \
+                in this exact format '['object 1', 'object 2', '...']'."
+
+RICH_PROMPT = "What are in these images? Give a detailed description of each item, the first n images will be \
+               cropped patches of the original image detected by the object detection model. \
+               Export the objects as a list of strings in this exact format, '['description of object 1', '...', '...']', \
+               don't include anything else. "
+
 
 class ImageAnalyzer:
     def __init__(self):
@@ -26,13 +36,14 @@ class ImageAnalyzer:
         _, buffer = cv2.imencode(".jpg", image)
         return base64.b64encode(buffer).decode("utf-8")
 
-    def analyze_images(self, images, detail="auto"):
+    def analyze_images(self, images, detail="auto", prompt_type="normal"):
         """
         Takes a list of cropped images and returns descriptions from OpenAI's Vision model.
 
         Parameters:
         images (list of numpy arrays): Cropped images from the original frame.
         detail (str): "low", "high", or "auto" to set image processing detail.
+        prompt_type (str): "normal" or "rich" to set the prompt type.
 
         Returns:
         list of str: Descriptions of objects in each image.
@@ -45,12 +56,19 @@ class ImageAnalyzer:
             for img in images
         ]
 
+        if prompt_type == "normal":
+            prompt = NORMAL_PROMPT
+        elif prompt_type == "rich":
+            prompt = RICH_PROMPT
+        else:
+            raise ValueError(f"Invalid prompt type: {prompt_type}")
+
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": "What is in these images? Give a short word answer with at most two words, if not sure, say unknown"}] + image_data,
+                    "content": [{"type": "text", "text": prompt}] + image_data,
                 }
             ],
             max_tokens=300,
