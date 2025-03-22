@@ -174,11 +174,12 @@ class Sam2DSegmenter:
 
                 if self.use_rich_labeling:
                     prompt_type = "rich"
+                    cropped_images.append(frame)
                 else:
                     prompt_type = "normal"
                     
                 self.current_future = self.analysis_executor.submit(
-                    self.image_analyzer.analyze_images, 
+                    self.image_analyzer.analyze_images,
                     cropped_images,
                     prompt_type=prompt_type
                 )

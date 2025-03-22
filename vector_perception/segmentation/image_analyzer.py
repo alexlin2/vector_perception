@@ -12,6 +12,8 @@ NORMAL_PROMPT = "What are in these images? Give a short word answer with at most
 
 RICH_PROMPT = "What are in these images? Give a detailed description of each item, the first n images will be \
                cropped patches of the original image detected by the object detection model. \
+               The last image will be the original image. Use the last image only for context, \
+               do not describe objects in the last image. \
                Export the objects as a list of strings in this exact format, '['description of object 1', '...', '...']', \
                don't include anything else. "
 
